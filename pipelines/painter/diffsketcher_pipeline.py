@@ -271,11 +271,14 @@ class DiffSketcherPipeline(ModelState):
 
     def compute_directional_clip_loss(self, current_img, anchor_img, target_text, source_text=None):
         """
-        🔥 Improvement 3: Directional CLIP Loss
+        🔥 Improvement 3: Directional CLIP Loss (Multi-view Augmentation Version)
         Guide image evolution direction to match text semantic direction.
 
         Based on StyleCLIP paper: instead of simply pulling image toward target text,
         we guide the CHANGE in image embedding to match the CHANGE in text embedding.
+
+        Uses multi-view augmentation (like clip_pair_augment) to reduce gradient variance
+        and improve training stability.
 
         Args:
             current_img: Current rendered image (B, C, H, W)
@@ -289,47 +292,53 @@ class DiffSketcherPipeline(ModelState):
         if source_text is None:
             source_text = self.args.prompt
 
-        # Preprocess images for CLIP (resize + normalize)
-        # Apply augmentation for better line art recognition
-        augment_trans = transforms.Compose([
-            transforms.RandomPerspective(distortion_scale=0.5, p=0.7),
-            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-        ])
+        # Get num_aug from config (default to 4 if not specified)
+        num_aug = getattr(self.args.clip, 'num_aug', 4)
 
-        # 【CRITICAL FIX】Concatenate images to ensure CONSISTENT augmentation
-        # This prevents comparing different crops/perspectives between current and anchor
-        combined_img = torch.cat([current_img, anchor_img], dim=0)
-        combined_aug = augment_trans(combined_img)
-
-        # Split augmented images
-        current_aug, anchor_aug = torch.chunk(combined_aug, 2, dim=0)
-
-        # Normalize for CLIP
-        current_norm = self.clip_score_fn.normalize(current_aug)
-        anchor_norm = self.clip_score_fn.normalize(anchor_aug)
-
-        # Encode images
-        with torch.no_grad():
-            # Anchor image encoding (no grad needed)
-            anchor_emb = self.clip_score_fn.encode_image(anchor_norm, norm=True)
-
-        # Current image encoding (needs grad)
-        current_emb = self.clip_score_fn.encode_image(current_norm, norm=True)
-
-        # Compute image direction vector
-        delta_I = current_emb - anchor_emb  # (B, D)
-        delta_I = delta_I / (delta_I.norm(dim=-1, keepdim=True) + 1e-8)
-
-        # Encode text and compute text direction vector
+        # Precompute text direction vector (only once, no gradients needed)
         with torch.no_grad():
             source_emb = self.clip_score_fn.encode_text(source_text, norm=True)
             target_emb = self.clip_score_fn.encode_text(target_text, norm=True)
             delta_T = target_emb - source_emb  # (1, D)
             delta_T = delta_T / (delta_T.norm(dim=-1, keepdim=True) + 1e-8)
 
-        # Directional loss: 1 - cosine_similarity(delta_I, delta_T)
-        # We want delta_I to align with delta_T
-        cosine_sim = torch.cosine_similarity(delta_I, delta_T, dim=-1)
+        # Define augmentation transforms (without normalize - will be applied separately)
+        augment_trans = transforms.Compose([
+            transforms.RandomPerspective(distortion_scale=0.5, p=1.0),
+            transforms.RandomResizedCrop(224, scale=(0.8, 0.8), ratio=(1.0, 1.0)),
+        ])
+
+        # 【MULTI-VIEW AUGMENTATION】Generate multiple augmented views
+        # Start with one non-augmented view (just normalized)
+        current_views = [self.clip_score_fn.normalize(current_img)]
+        anchor_views = [self.clip_score_fn.normalize(anchor_img)]
+
+        # Generate num_aug additional random views
+        for _ in range(num_aug):
+            # 【CRITICAL】Concatenate to ensure same augmentation for both images
+            combined_img = torch.cat([current_img, anchor_img], dim=0)
+            combined_aug = augment_trans(combined_img)
+
+            # Split and normalize
+            current_aug, anchor_aug = torch.chunk(combined_aug, 2, dim=0)
+            current_views.append(self.clip_norm_(current_aug))
+            anchor_views.append(self.clip_norm_(anchor_aug))
+
+        # Stack all views: (num_aug+1, C, H, W)
+        current_stack = torch.cat(current_views, dim=0)
+        anchor_stack = torch.cat(anchor_views, dim=0)
+
+        # Encode all views at once
+        with torch.no_grad():
+            anchor_embs = self.clip_score_fn.encode_image(anchor_stack, norm=True)  # (num_aug+1, D)
+        current_embs = self.clip_score_fn.encode_image(current_stack, norm=True)  # (num_aug+1, D)
+
+        # Compute direction vectors for all views
+        delta_I = current_embs - anchor_embs  # (num_aug+1, D)
+        delta_I = delta_I / (delta_I.norm(dim=-1, keepdim=True) + 1e-8)
+
+        # Compute directional loss (averaged across all views)
+        cosine_sim = torch.cosine_similarity(delta_I, delta_T, dim=-1)  # (num_aug+1,)
         loss = (1 - cosine_sim).mean()
 
         return loss

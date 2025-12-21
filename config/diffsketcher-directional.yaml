@@ -54,7 +54,7 @@ guidance_scale: 7.5
 use_dynamic_weights: False
 use_directional_clip: True  # ✅ Enable
 style_prompt: "a charcoal sketch"  # Will be overridden
-directional_clip_coeff: 0.1
+directional_clip_coeff: 0.3
 use_saliency_pruning: False  # ❌ Disable
 
 # ASDS loss
@@ -74,7 +74,7 @@ clip:
   feats_loss_weights: [ 0,0,1.0,1.0,0 ]
   fc_loss_weight: 0.1
   augmentations: "affine"
-  num_aug: 4
+  num_aug: 8  # 1 global + 8 augmented = 9 total views for directional CLIP
   vis_loss: 1
   text_visual_coeff: 0
 perceptual:

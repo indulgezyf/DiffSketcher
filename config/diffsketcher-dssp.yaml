@@ -75,7 +75,7 @@ clip:
   feats_loss_weights: [ 0,0,1.0,1.0,0 ]
   fc_loss_weight: 0.1
   augmentations: "affine"
-  num_aug: 4
+  num_aug: 8  # 1 global + 8 augmented = 9 total views for directional CLIP
   vis_loss: 1
   text_visual_coeff: 0
 perceptual:
