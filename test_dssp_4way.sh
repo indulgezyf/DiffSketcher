@@ -54,24 +54,36 @@ mkdir -p $DSSP_DIR
 # echo "✅ Baseline complete!"
 # echo ""
 
-# ===== Test 2: Directional CLIP Only =====
-echo "🎨 Test 2/4: Running DIRECTIONAL CLIP only..."
-echo ""
+# # ===== Test 2: Directional CLIP Only =====
+# echo "🎨 Test 2/4: Running DIRECTIONAL CLIP only..."
+# echo ""
 
+# time python run_painterly_render.py \
+#   -c diffsketcher-directional.yaml \
+#   -eval_step 10 \
+#   -save_step 50 \
+#   -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt=$STYLE_PROMPT" \
+#   -pt "$PROMPT" \
+#   -respath "$DIRECTIONAL_DIR" \
+#   -d $SEED \
+#   --download \
+#   2>&1 | tee "$DIRECTIONAL_DIR/training.log"
+
+# echo ""
+# echo "✅ Directional CLIP complete!"
+# echo ""
+# ===== Variation A: Van Gogh Style (Color & Texture) =====
+PROMPT="a photo of Sydney opera house"
+STYLE_PROMPT="an oil painting of Sydney opera house in the style of Starry Night by Van Gogh"
+
+echo "🎨 Variation A: Van Gogh Style..."
 time python run_painterly_render.py \
   -c diffsketcher-directional.yaml \
-  -eval_step 10 \
-  -save_step 50 \
-  -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt=$STYLE_PROMPT" \
+  -eval_step 10 -save_step 50 \
+  -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt=\"$STYLE_PROMPT\" optim_rgba=True" \
   -pt "$PROMPT" \
-  -respath "$DIRECTIONAL_DIR" \
-  -d $SEED \
-  --download \
-  2>&1 | tee "$DIRECTIONAL_DIR/training.log"
-
-echo ""
-echo "✅ Directional CLIP complete!"
-echo ""
+  -respath "./workdir/directional_vangogh" \
+  -d $SEED --download
 
 # # ===== Test 3: Saliency Pruning Only =====
 # echo "✂️  Test 3/4: Running SALIENCY PRUNING only..."
