@@ -296,8 +296,13 @@ class DiffSketcherPipeline(ModelState):
             transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
         ])
 
-        current_aug = augment_trans(current_img)
-        anchor_aug = augment_trans(anchor_img)
+        # 【CRITICAL FIX】Concatenate images to ensure CONSISTENT augmentation
+        # This prevents comparing different crops/perspectives between current and anchor
+        combined_img = torch.cat([current_img, anchor_img], dim=0)
+        combined_aug = augment_trans(combined_img)
+
+        # Split augmented images
+        current_aug, anchor_aug = torch.chunk(combined_aug, 2, dim=0)
 
         # Normalize for CLIP
         current_norm = self.clip_score_fn.normalize(current_aug)
@@ -391,14 +396,15 @@ class DiffSketcherPipeline(ModelState):
         best_iter_v, best_iter_s = 0, 0
         min_delta = 1e-6
 
-        # 🔥 Improvement 3: Save initial image as anchor for directional CLIP loss
+        # 🔥 Improvement 3: Use reference image as anchor for directional CLIP loss
         anchor_img = None
         use_directional_clip = getattr(self.args, 'use_directional_clip', False)
         if use_directional_clip:
-            # Render initial image and save as anchor
-            with torch.no_grad():
-                anchor_img = renderer.get_image().to(self.device).detach()
-            self.print(f"-> Directional CLIP enabled, anchor image saved")
+            # 【CRITICAL FIX】Use the REFERENCE IMAGE (inputs) as anchor, NOT initial canvas
+            # This ensures we're measuring style change (photo→sketch), not content generation (blank→sketch)
+            anchor_img = inputs.detach().clone()
+            self.print(f"-> Directional CLIP enabled, using REFERENCE IMAGE as anchor")
+            self.print(f"   source_prompt: {self.args.prompt}")
             self.print(f"   style_prompt: {getattr(self.args, 'style_prompt', 'N/A')}")
 
         # 🔥 Improvement 4: Initialize gradient history for saliency pruning
