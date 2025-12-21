@@ -349,8 +349,16 @@ class DiffSketcherPipeline(ModelState):
                         raster_sketch_aug, self.args.prompt
                     ) * self.cargs.text_visual_coeff
 
+                # pruning loss (Soft-OBR with EMA)
+                l_prune = renderer.update_ema_and_get_loss(
+                    global_step=self.step,
+                    prune_start_step=getattr(self.args, 'prune_start_step', 200),
+                    prune_ema_threshold=getattr(self.args, 'prune_ema_threshold', 0.02),
+                    prune_loss_weight=getattr(self.args, 'prune_loss_weight', 10.0)
+                )
+
                 # total loss
-                loss = sds_loss + total_visual_loss + l_percep + l_tvd
+                loss = sds_loss + total_visual_loss + l_percep + l_tvd + l_prune
 
                 # optimization
                 optimizer.zero_grad_()
@@ -372,6 +380,7 @@ class DiffSketcherPipeline(ModelState):
                     f"l_clip_conv({len(l_clip_conv)}): {clip_conv_loss_sum.item():.4f}, "
                     f"l_tvd: {l_tvd.item():.4f}, "
                     f"l_percep: {l_percep.item():.4f}, "
+                    f"l_prune: {l_prune.item():.4f}, "
                     f"sds: {grad.item():.4e}"
                 )
 

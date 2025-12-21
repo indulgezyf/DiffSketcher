@@ -74,3 +74,8 @@ perceptual:
   name: "lpips" # dists, lpips
   lpips_net: 'vgg'
   coeff: 0.2
+
+# Dynamic pruning (Soft-OBR with EMA)
+prune_start_step: 200  # Start pruning after this many steps (warmup period)
+prune_ema_threshold: 0.02  # EMA threshold to identify dead strokes
+prune_loss_weight: 10.0  # Weight for pruning loss

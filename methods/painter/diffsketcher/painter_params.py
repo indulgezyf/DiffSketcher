@@ -101,6 +101,9 @@ class Painter(nn.Module):
                 self.shape_groups.append(path_group)
             self.optimize_flag = [True for i in range(len(self.shapes))]
 
+        # Initialize EMA tracker after shapes are created
+        self.alphas_ema = self.get_alphas().detach().clone()
+
         img = self.render_warp()
         img = img[:, :, 3:4] * img[:, :, :3] + \
               torch.ones(img.shape[0], img.shape[1], 3, device=self.device) * (1 - img[:, :, 3:4])
@@ -119,6 +122,51 @@ class Painter(nn.Module):
         img = img.unsqueeze(0)  # convert img from HWC to NCHW
         img = img.permute(0, 3, 1, 2).to(self.device)  # NHWC -> NCHW
         return img
+
+    def get_alphas(self):
+        """Extract opacity (alpha channel) from all strokes"""
+        alphas = []
+        for group in self.shape_groups:
+            alphas.append(group.stroke_color[-1])  # RGBA's last channel is alpha
+        return torch.stack(alphas)
+
+    def update_ema_and_get_loss(self, global_step, prune_start_step=200, prune_ema_threshold=0.02, prune_loss_weight=10.0):
+        """
+        Update EMA of opacity and compute Soft-OBR pruning loss
+
+        Args:
+            global_step: Current training step
+            prune_start_step: Step to start applying pruning (default 200)
+            prune_ema_threshold: EMA threshold to identify dead strokes (default 0.02)
+            prune_loss_weight: Weight for pruning loss (default 10.0)
+
+        Returns:
+            prune_loss: Loss to force low-EMA strokes to become fully transparent
+        """
+        current_alphas = self.get_alphas()
+
+        # Initialize EMA on first call (safety check)
+        if not hasattr(self, 'alphas_ema'):
+            self.alphas_ema = current_alphas.detach().clone()
+
+        # Update EMA (Beta=0.9, approximately last 10 steps)
+        with torch.no_grad():
+            self.alphas_ema = 0.9 * self.alphas_ema + 0.1 * current_alphas.detach()
+
+        # Don't apply pruning before warmup period
+        if global_step < prune_start_step:
+            return torch.tensor(0.0, device=current_alphas.device)
+
+        # Identify dead strokes based on EMA
+        dead_mask = self.alphas_ema < prune_ema_threshold
+
+        if dead_mask.sum() == 0:
+            return torch.tensor(0.0, device=current_alphas.device)
+
+        # Apply L2 loss to force dead strokes to alpha=0
+        prune_loss = (current_alphas[dead_mask] ** 2).mean()
+
+        return prune_loss * prune_loss_weight
 
     def get_path(self):
         self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) + (self.control_points_per_seg - 2)
@@ -211,12 +259,47 @@ class Painter(nn.Module):
     def get_color_parameters(self):
         return self.color_vars
 
-    def save_svg(self, output_dir, fname):
-        pydiffvg.save_svg(f'{output_dir}/{fname}.svg',
-                          self.canvas_width,
-                          self.canvas_height,
-                          self.shapes,
-                          self.shape_groups)
+    def save_svg(self, output_dir, fname, opacity_threshold=0.01):
+        """
+        Save SVG with optional filtering of low-opacity strokes
+
+        Args:
+            output_dir: Output directory
+            fname: Filename (without .svg extension)
+            opacity_threshold: Filter out strokes with opacity below this value (default 0.01)
+        """
+        # Filter out dead strokes (opacity near 0)
+        final_shapes = []
+        final_groups = []
+
+        alphas = self.get_alphas().detach().cpu()
+
+        for i in range(len(self.shapes)):
+            if alphas[i] > opacity_threshold:
+                final_shapes.append(self.shapes[i])
+
+                # Create new group with re-indexed shape_id
+                old_group = self.shape_groups[i]
+                new_group = pydiffvg.ShapeGroup(
+                    shape_ids=torch.tensor([len(final_shapes) - 1]),
+                    fill_color=old_group.fill_color,
+                    stroke_color=old_group.stroke_color
+                )
+                final_groups.append(new_group)
+
+        # Log filtering statistics
+        num_filtered = len(self.shapes) - len(final_shapes)
+        if num_filtered > 0:
+            print(f"[SVG Export] Filtered out {num_filtered}/{len(self.shapes)} low-opacity strokes")
+
+        # Save using filtered lists
+        pydiffvg.save_svg(
+            f'{output_dir}/{fname}.svg',
+            self.canvas_width,
+            self.canvas_height,
+            final_shapes,
+            final_groups
+        )
 
     def load_svg(self, path_svg):
         canvas_width, canvas_height, shapes, shape_groups = pydiffvg.svg_to_scene(path_svg)
