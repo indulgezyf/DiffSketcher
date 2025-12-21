@@ -37,25 +37,25 @@ def parse_training_log(log_file: Path) -> Dict:
                 try:
                     # Extract values
                     total_match = re.search(r"l_total:\s*([\d.]+)", line)
+
+                    # Only process if we have total loss
+                    if not total_match:
+                        continue
+
                     clip_fc_match = re.search(r"l_clip_fc:\s*([\d.]+)", line)
                     clip_conv_match = re.search(r"l_clip_conv\(\d+\):\s*([\d.]+)", line)
                     percep_match = re.search(r"l_percep:\s*([\d.]+)", line)
                     sds_match = re.search(r"sds:\s*([\d.]+e[+-]?\d+)", line)
 
-                    if total_match:
-                        losses["total"].append(float(total_match.group(1)))
-                    if clip_fc_match:
-                        losses["clip_fc"].append(float(clip_fc_match.group(1)))
-                    if clip_conv_match:
-                        losses["clip_conv"].append(float(clip_conv_match.group(1)))
-                    if percep_match:
-                        losses["percep"].append(float(percep_match.group(1)))
-                    if sds_match:
-                        losses["sds"].append(float(sds_match.group(1)))
-
+                    # Append values, use None for missing values to keep alignment
+                    losses["total"].append(float(total_match.group(1)))
+                    losses["clip_fc"].append(float(clip_fc_match.group(1)) if clip_fc_match else None)
+                    losses["clip_conv"].append(float(clip_conv_match.group(1)) if clip_conv_match else None)
+                    losses["percep"].append(float(percep_match.group(1)) if percep_match else None)
+                    losses["sds"].append(float(sds_match.group(1)) if sds_match else None)
                     losses["steps"].append(len(losses["total"]))
 
-                except Exception as e:
+                except Exception:
                     continue
 
     return losses if losses["total"] else None
@@ -145,22 +145,40 @@ def plot_comparison(baseline_losses: Dict, improved_losses: Dict, output_dir: Pa
         ax = axes[idx // 2, idx % 2]
 
         if baseline_losses and baseline_losses.get(loss_key):
-            ax.plot(
-                baseline_losses["steps"],
-                baseline_losses[loss_key],
-                label="Baseline",
-                color="blue",
-                alpha=0.7,
-            )
+            # Filter out None values
+            steps = []
+            values = []
+            for s, v in zip(baseline_losses["steps"], baseline_losses[loss_key]):
+                if v is not None:
+                    steps.append(s)
+                    values.append(v)
+
+            if steps:
+                ax.plot(
+                    steps,
+                    values,
+                    label="Baseline",
+                    color="blue",
+                    alpha=0.7,
+                )
 
         if improved_losses and improved_losses.get(loss_key):
-            ax.plot(
-                improved_losses["steps"],
-                improved_losses[loss_key],
-                label="Improved",
-                color="red",
-                alpha=0.7,
-            )
+            # Filter out None values
+            steps = []
+            values = []
+            for s, v in zip(improved_losses["steps"], improved_losses[loss_key]):
+                if v is not None:
+                    steps.append(s)
+                    values.append(v)
+
+            if steps:
+                ax.plot(
+                    steps,
+                    values,
+                    label="Improved",
+                    color="red",
+                    alpha=0.7,
+                )
 
         ax.set_xlabel("Training Step")
         ax.set_ylabel(loss_name)
