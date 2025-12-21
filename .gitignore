@@ -145,8 +145,8 @@ lightning_logs/*
 .editorconfig
 
 # local results
-/workdir/
-.workdir/
+# /workdir/
+# .workdir/
 
 # dataset
 /dataset/

@@ -31,7 +31,7 @@ echo ""
 # ===== Run Baseline =====
 echo "🔹 Running BASELINE version (no improvements)..."
 echo ""
-
+mkdir -p $BASELINE_DIR
 time python run_painterly_render.py \
   -c diffsketcher-baseline.yaml \
   -eval_step 10 \
@@ -50,7 +50,7 @@ echo ""
 # ===== Run Dynamic Weights Only =====
 echo "🔥 Running DYNAMIC WEIGHTS ONLY version..."
 echo ""
-
+mkdir -p $DYNAMIC_WEIGHTS_DIR
 time python run_painterly_render.py \
   -c diffsketcher-dynamic-weights.yaml \
   -eval_step 10 \
@@ -69,7 +69,7 @@ echo ""
 # ===== Run Full Improved Version =====
 echo "🚀 Running FULL IMPROVED version (Dynamic Weights + Curriculum)..."
 echo ""
-
+mkdir -p $FULL_IMPROVED_DIR
 time python run_painterly_render.py \
   -c diffsketcher-improved.yaml \
   -eval_step 10 \
@@ -85,15 +85,3 @@ echo ""
 echo "✅ Full improved version complete!"
 echo ""
 
-echo "============================================"
-echo "All three experiments completed!"
-echo "============================================"
-echo ""
-echo "Results saved to:"
-echo "  - Baseline:        $BASELINE_DIR"
-echo "  - Dynamic Weights: $DYNAMIC_WEIGHTS_DIR"
-echo "  - Full Improved:   $FULL_IMPROVED_DIR"
-echo ""
-echo "Run analysis with:"
-echo "  python analyze_results_3way.py"
-echo ""
