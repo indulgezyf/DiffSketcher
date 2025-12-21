@@ -58,7 +58,7 @@ time python run_painterly_render.py \
   -c diffsketcher-directional.yaml \
   -eval_step 10 \
   -save_step 50 \
-  -update token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt="$STYLE_PROMPT" \
+  -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt=$STYLE_PROMPT" \
   -pt "$PROMPT" \
   -respath "$DIRECTIONAL_DIR" \
   -d $SEED \
@@ -96,7 +96,7 @@ time python run_painterly_render.py \
   -c diffsketcher-dssp.yaml \
   -eval_step 10 \
   -save_step 50 \
-  -update token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt="$STYLE_PROMPT" \
+  -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER style_prompt=$STYLE_PROMPT" \
   -pt "$PROMPT" \
   -respath "$DSSP_DIR" \
   -d $SEED \
