@@ -269,6 +269,66 @@ class DiffSketcherPipeline(ModelState):
                 'tvd': 0.5       # Lower text-visual alignment
             }
 
+    def compute_directional_clip_loss(self, current_img, anchor_img, target_text, source_text=None):
+        """
+        🔥 Improvement 3: Directional CLIP Loss
+        Guide image evolution direction to match text semantic direction.
+
+        Based on StyleCLIP paper: instead of simply pulling image toward target text,
+        we guide the CHANGE in image embedding to match the CHANGE in text embedding.
+
+        Args:
+            current_img: Current rendered image (B, C, H, W)
+            anchor_img: Initial/anchor image (B, C, H, W)
+            target_text: Target style description (str)
+            source_text: Source description (str), if None uses self.args.prompt
+
+        Returns:
+            Directional CLIP loss value (scalar tensor)
+        """
+        if source_text is None:
+            source_text = self.args.prompt
+
+        # Preprocess images for CLIP (resize + normalize)
+        # Apply augmentation for better line art recognition
+        augment_trans = transforms.Compose([
+            transforms.RandomPerspective(distortion_scale=0.5, p=0.7),
+            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+        ])
+
+        current_aug = augment_trans(current_img)
+        anchor_aug = augment_trans(anchor_img)
+
+        # Normalize for CLIP
+        current_norm = self.clip_score_fn.normalize(current_aug)
+        anchor_norm = self.clip_score_fn.normalize(anchor_aug)
+
+        # Encode images
+        with torch.no_grad():
+            # Anchor image encoding (no grad needed)
+            anchor_emb = self.clip_score_fn.encode_image(anchor_norm, norm=True)
+
+        # Current image encoding (needs grad)
+        current_emb = self.clip_score_fn.encode_image(current_norm, norm=True)
+
+        # Compute image direction vector
+        delta_I = current_emb - anchor_emb  # (B, D)
+        delta_I = delta_I / (delta_I.norm(dim=-1, keepdim=True) + 1e-8)
+
+        # Encode text and compute text direction vector
+        with torch.no_grad():
+            source_emb = self.clip_score_fn.encode_text(source_text, norm=True)
+            target_emb = self.clip_score_fn.encode_text(target_text, norm=True)
+            delta_T = target_emb - source_emb  # (1, D)
+            delta_T = delta_T / (delta_T.norm(dim=-1, keepdim=True) + 1e-8)
+
+        # Directional loss: 1 - cosine_similarity(delta_I, delta_T)
+        # We want delta_I to align with delta_T
+        cosine_sim = torch.cosine_similarity(delta_I, delta_T, dim=-1)
+        loss = (1 - cosine_sim).mean()
+
+        return loss
+
     def painterly_rendering(self, prompt: str):
         # log prompts
         self.print(f"prompt: {prompt}")
@@ -330,6 +390,24 @@ class DiffSketcherPipeline(ModelState):
         best_visual_loss, best_semantic_loss = 100, 100
         best_iter_v, best_iter_s = 0, 0
         min_delta = 1e-6
+
+        # 🔥 Improvement 3: Save initial image as anchor for directional CLIP loss
+        anchor_img = None
+        use_directional_clip = getattr(self.args, 'use_directional_clip', False)
+        if use_directional_clip:
+            # Render initial image and save as anchor
+            with torch.no_grad():
+                anchor_img = renderer.get_image().to(self.device).detach()
+            self.print(f"-> Directional CLIP enabled, anchor image saved")
+            self.print(f"   style_prompt: {getattr(self.args, 'style_prompt', 'N/A')}")
+
+        # 🔥 Improvement 4: Initialize gradient history for saliency pruning
+        use_saliency_pruning = getattr(self.args, 'use_saliency_pruning', False)
+        grad_history = []
+        if use_saliency_pruning:
+            pruning_freq = getattr(self.args, 'saliency_pruning_freq', 50)
+            self.print(f"-> Saliency-adaptive pruning enabled")
+            self.print(f"   pruning_freq: {pruning_freq}")
 
         self.print(f"\ntotal optimization steps: {self.args.num_iter}")
         with tqdm(initial=self.step, total=self.args.num_iter, disable=not self.accelerator.is_main_process) as pbar:
@@ -393,6 +471,16 @@ class DiffSketcherPipeline(ModelState):
                         raster_sketch_aug, self.args.prompt
                     ) * self.cargs.text_visual_coeff
 
+                # 🔥 Improvement 3: Directional CLIP loss
+                l_directional = torch.tensor(0.)
+                if use_directional_clip and anchor_img is not None:
+                    style_prompt = getattr(self.args, 'style_prompt', None)
+                    if style_prompt:
+                        directional_coeff = getattr(self.args, 'directional_clip_coeff', 1.0)
+                        l_directional = self.compute_directional_clip_loss(
+                            raster_sketch, anchor_img, style_prompt, self.args.prompt
+                        ) * directional_coeff
+
                 # 🔥 Improvement 2: Apply dynamic loss weighting
                 use_dynamic_weights = getattr(self.args, 'use_dynamic_weights', False)
                 if use_dynamic_weights:
@@ -400,33 +488,56 @@ class DiffSketcherPipeline(ModelState):
                     loss = (weights['sds'] * sds_loss +
                             weights['visual'] * total_visual_loss +
                             weights['percep'] * l_percep +
-                            weights['tvd'] * l_tvd)
+                            weights['tvd'] * l_tvd +
+                            l_directional)  # Directional loss not weighted by stage
                 else:
                     # Original fixed weighting
-                    loss = sds_loss + total_visual_loss + l_percep + l_tvd
+                    loss = sds_loss + total_visual_loss + l_percep + l_tvd + l_directional
 
                 # optimization
                 optimizer.zero_grad_()
+
+                # 🔥 Improvement 4: Save gradients BEFORE zero_grad for saliency pruning
+                if use_saliency_pruning:
+                    # Clone gradients for color parameters (opacity)
+                    current_grad_snapshot = []
+                    for param in renderer.get_color_parameters():
+                        if param.grad is not None:
+                            current_grad_snapshot.append(param.grad.clone().detach())
+                        else:
+                            current_grad_snapshot.append(None)
+                    grad_history = current_grad_snapshot  # Update with latest
+
                 loss.backward()
                 optimizer.step_()
 
-                # if self.step % self.args.pruning_freq == 0:
-                #     renderer.path_pruning()
+                # 🔥 Improvement 4: Apply saliency-adaptive pruning
+                if use_saliency_pruning and self.step % pruning_freq == 0 and self.step > 0:
+                    pruned_count = renderer.saliency_adaptive_pruning(
+                        grad_history,
+                        self.step,
+                        self.args.num_iter
+                    )
+                    if pruned_count > 0:
+                        self.print(f"  [Pruning] Step {self.step}: Removed {pruned_count} low-saliency strokes")
 
                 # update lr
                 if self.args.lr_scheduler:
                     optimizer.update_lr(self.step, self.args.decay_steps)
 
                 # records
-                pbar.set_description(
+                desc_str = (
                     f"lr: {optimizer.get_lr():.2f}, "
                     f"l_total: {loss.item():.4f}, "
                     f"l_clip_fc: {l_clip_fc.item():.4f}, "
                     f"l_clip_conv({len(l_clip_conv)}): {clip_conv_loss_sum.item():.4f}, "
                     f"l_tvd: {l_tvd.item():.4f}, "
                     f"l_percep: {l_percep.item():.4f}, "
-                    f"sds: {grad.item():.4e}"
                 )
+                if use_directional_clip:
+                    desc_str += f"l_dir: {l_directional.item():.4f}, "
+                desc_str += f"sds: {grad.item():.4e}"
+                pbar.set_description(desc_str)
 
                 # log raster and svg
                 if self.step % self.args.save_step == 0 and self.accelerator.is_main_process:

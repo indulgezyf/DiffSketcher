@@ -1,0 +1,83 @@
+image_size: 224
+path_svg: ~
+mask_object: False
+fix_scale: False
+
+# train
+num_iter: 500
+batch_size: 1
+num_stages: 1
+lr_scheduler: False
+lr_decay_rate: 0.1
+decay_steps: [ 1000, 1500 ]
+lr: 1
+color_lr: 0.01
+pruning_freq: 50
+color_vars_threshold: 0.1
+width_lr: 0.1
+max_width: 50
+
+# stroke attrs
+num_paths: 96
+width: 1.5
+control_points_per_seg: 4
+num_segments: 1
+optim_opacity: True
+optim_width: False
+optim_rgba: False
+opacity_delta: 0
+
+# init strokes
+attention_init: True
+xdog_intersec: True
+softmax_temp: 0.5
+cross_attn_res: 16
+self_attn_res: 32
+max_com: 20
+mean_comp: False
+comp_idx: 0
+attn_coeff: 1.0
+log_cross_attn: False
+u2net_path: "./checkpoint/u2net/u2net.pth"
+
+# ldm
+model_id: "sd15"
+ldm_speed_up: False
+enable_xformers: True
+gradient_checkpoint: False
+token_ind: 4
+use_ddim: True
+num_inference_steps: 100
+guidance_scale: 7.5
+
+# 🔥 Directional CLIP Only
+use_dynamic_weights: False
+use_directional_clip: True  # ✅ Enable
+style_prompt: "a charcoal sketch"  # Will be overridden
+directional_clip_coeff: 1.0
+use_saliency_pruning: False  # ❌ Disable
+
+# ASDS loss
+sds:
+  crop_size: 512
+  augmentations: "affine"
+  guidance_scale: 100
+  grad_scale: 1e-6
+  t_range: [ 0.05, 0.95 ]
+  warmup: 200
+  use_curriculum: False
+
+# JVSP
+clip:
+  model_name: "RN101"
+  feats_loss_type: "l2"
+  feats_loss_weights: [ 0,0,1.0,1.0,0 ]
+  fc_loss_weight: 0.1
+  augmentations: "affine"
+  num_aug: 4
+  vis_loss: 1
+  text_visual_coeff: 0
+perceptual:
+  name: "lpips"
+  lpips_net: 'vgg'
+  coeff: 0.2

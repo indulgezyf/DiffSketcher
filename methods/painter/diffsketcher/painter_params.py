@@ -162,6 +162,84 @@ class Painter(nn.Module):
         for group in self.shape_groups:
             group.stroke_color.data[-1] = (group.stroke_color.data[-1] >= self.color_vars_threshold).float()
 
+    def saliency_adaptive_pruning(self, grad_history, current_step, total_steps, prune_ratio=None):
+        """
+        🔥 Improvement 4: Saliency-Adaptive Pruning
+        Prune strokes based on importance score: S_i = opacity_i * ||grad_i||
+
+        Args:
+            grad_history: List of gradient tensors for each stroke (from color_vars)
+            current_step: Current optimization step
+            total_steps: Total optimization steps
+            prune_ratio: Fraction of strokes to prune (None for adaptive ratio)
+
+        Returns:
+            Number of strokes pruned
+        """
+        if not grad_history or len(grad_history) == 0:
+            return 0
+
+        progress = current_step / max(total_steps, 1)
+
+        # Adaptive pruning ratio based on training progress
+        # Conservative strategy: prioritize quality over speed
+        if prune_ratio is None:
+            if progress < 0.4:
+                # Early stage: no pruning (let strokes fully initialize)
+                prune_ratio = 0.0
+            elif progress < 0.8:
+                # Mid stage: gentle pruning (less aggressive)
+                prune_ratio = 0.05 * (progress - 0.4) / 0.4  # 0 → 0.05 (very gradual)
+            else:
+                # Late stage: minimal pruning (only remove truly dead strokes)
+                prune_ratio = 0.03  # Only prune worst 3%
+
+        if prune_ratio == 0.0:
+            return 0
+
+        # Compute saliency scores for each stroke
+        saliency_scores = []
+        for i, group in enumerate(self.shape_groups):
+            if not self.optimize_flag[i]:
+                # Don't prune frozen strokes
+                saliency_scores.append(float('inf'))
+                continue
+
+            # Get opacity (alpha channel)
+            opacity = group.stroke_color.data[-1].item()
+
+            # Get gradient norm from history
+            # Use recent gradient (last in history)
+            if i < len(grad_history) and grad_history[i] is not None:
+                grad_norm = grad_history[i].norm().item()
+            else:
+                grad_norm = 0.0
+
+            # Saliency score: opacity * gradient_norm
+            # Low score = low opacity AND low gradient = not important
+            score = opacity * grad_norm
+            saliency_scores.append(score)
+
+        # Determine pruning threshold
+        finite_scores = [s for s in saliency_scores if s != float('inf')]
+        if len(finite_scores) == 0:
+            return 0
+
+        # Prune lowest prune_ratio of strokes
+        threshold = np.quantile(finite_scores, prune_ratio)
+
+        # Mark strokes for pruning by setting opacity to 0
+        pruned_count = 0
+        for i, score in enumerate(saliency_scores):
+            if score < threshold and score != float('inf'):
+                # Set opacity to 0 (invisible)
+                self.shape_groups[i].stroke_color.data[-1] = 0.0
+                # Mark as not optimizable
+                self.optimize_flag[i] = False
+                pruned_count += 1
+
+        return pruned_count
+
     def render_warp(self):
         self.clip_curve_shape()
 
