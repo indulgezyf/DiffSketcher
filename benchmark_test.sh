@@ -28,26 +28,28 @@ echo "============================================"
 echo ""
 
 # ===== Run Baseline =====
-echo "Running BASELINE version..."
+# echo "Running BASELINE version..."
 
-time python run_painterly_render.py \
-  -c diffsketcher.yaml \
-  -eval_step 10 \
-  -save_step 50 \
-  -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER" \
-  -pt "$PROMPT" \
-  -respath "$BASELINE_DIR" \
-  -d $SEED \
-  --download \
-  2>&1 | tee "$BASELINE_DIR/training.log"
+mkdir -p "$BASELINE_DIR"
+# time python run_painterly_render.py \
+#   -c diffsketcher.yaml \
+#   -eval_step 10 \
+#   -save_step 50 \
+#   -update "token_ind=$TOKEN_IND num_paths=$NUM_PATHS num_iter=$NUM_ITER" \
+#   -pt "$PROMPT" \
+#   -respath "$BASELINE_DIR" \
+#   -d $SEED \
+#   --download \
+#   2>&1 | tee "$BASELINE_DIR/training.log"
 
-echo ""
-echo "Baseline complete!"
-echo ""
+# echo ""
+# echo "Baseline complete!"
+# echo ""
 
 # ===== Run Improved Version =====
 echo "Running IMPROVED version (Curriculum + Dynamic Weights)..."
 
+mkdir -p "$IMPROVED_DIR"
 time python run_painterly_render.py \
   -c diffsketcher-improved.yaml \
   -eval_step 10 \
