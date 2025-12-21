@@ -54,7 +54,7 @@ guidance_scale: 7.5
 use_dynamic_weights: False
 use_directional_clip: True  # ✅ Enable
 style_prompt: "a charcoal sketch"  # Will be overridden
-directional_clip_coeff: 1.0
+directional_clip_coeff: 0.1
 use_saliency_pruning: False  # ❌ Disable
 
 # ASDS loss
