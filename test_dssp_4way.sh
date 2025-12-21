@@ -31,6 +31,10 @@ echo "Token Index:  $TOKEN_IND"
 echo "============================================"
 echo ""
 
+mkdir -p $BASELINE_DIR
+mkdir -p $DIRECTIONAL_DIR
+mkdir -p $PRUNING_DIR
+mkdir -p $DSSP_DIR
 # ===== Test 1: Baseline =====
 echo "🔹 Test 1/4: Running BASELINE version (no improvements)..."
 echo ""
@@ -105,23 +109,4 @@ time python run_painterly_render.py \
 
 echo ""
 echo "✅ DSSP complete!"
-echo ""
-
-echo "============================================"
-echo "All four tests completed successfully!"
-echo "============================================"
-echo ""
-echo "Results summary:"
-echo "  1. Baseline:          $BASELINE_DIR/visual_best.png"
-echo "  2. Directional CLIP:  $DIRECTIONAL_DIR/visual_best.png"
-echo "  3. Saliency Pruning:  $PRUNING_DIR/visual_best.png"
-echo "  4. DSSP (Combined):   $DSSP_DIR/visual_best.png"
-echo ""
-echo "To view results:"
-echo "  open $BASELINE_DIR/visual_best.png"
-echo "  open $DIRECTIONAL_DIR/visual_best.png"
-echo "  open $PRUNING_DIR/visual_best.png"
-echo "  open $DSSP_DIR/visual_best.png"
-echo ""
-echo "Training logs saved in each directory as 'training.log'"
 echo ""
