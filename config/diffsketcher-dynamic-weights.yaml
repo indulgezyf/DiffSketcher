@@ -50,7 +50,7 @@ use_ddim: True
 num_inference_steps: 100
 guidance_scale: 7.5 # sdxl default 5.0
 
-# 🔥 Improvement Flags
+# 🔥 Improvement: Dynamic Loss Weighting ONLY
 use_dynamic_weights: True  # Enable dynamic loss weighting
 
 # ASDS loss
@@ -61,7 +61,7 @@ sds:
   grad_scale: 1e-6
   t_range: [ 0.05, 0.95 ]
   warmup: 200  # Same as baseline for fair comparison
-  use_curriculum: True  # 🔥 Enable timestep curriculum learning
+  use_curriculum: False  # ❌ Disable curriculum (testing dynamic weights only)
 
 # JVSP
 clip:
