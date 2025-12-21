@@ -259,47 +259,59 @@ class Painter(nn.Module):
     def get_color_parameters(self):
         return self.color_vars
 
-    def save_svg(self, output_dir, fname, opacity_threshold=0.01):
+    def save_svg(self, output_dir, fname, opacity_threshold=None):
         """
         Save SVG with optional filtering of low-opacity strokes
 
         Args:
             output_dir: Output directory
             fname: Filename (without .svg extension)
-            opacity_threshold: Filter out strokes with opacity below this value (default 0.01)
+            opacity_threshold: If specified, filter out strokes with opacity below this value.
+                             If None (default), save all strokes without filtering.
         """
-        # Filter out dead strokes (opacity near 0)
-        final_shapes = []
-        final_groups = []
+        # Determine whether to filter
+        if opacity_threshold is not None:
+            # Filter mode: remove low-opacity strokes
+            final_shapes = []
+            final_groups = []
 
-        alphas = self.get_alphas().detach().cpu()
+            alphas = self.get_alphas().detach().cpu()
 
-        for i in range(len(self.shapes)):
-            if alphas[i] > opacity_threshold:
-                final_shapes.append(self.shapes[i])
+            for i in range(len(self.shapes)):
+                if alphas[i] > opacity_threshold:
+                    final_shapes.append(self.shapes[i])
 
-                # Create new group with re-indexed shape_id
-                old_group = self.shape_groups[i]
-                new_group = pydiffvg.ShapeGroup(
-                    shape_ids=torch.tensor([len(final_shapes) - 1]),
-                    fill_color=old_group.fill_color,
-                    stroke_color=old_group.stroke_color
-                )
-                final_groups.append(new_group)
+                    # Create new group with re-indexed shape_id
+                    old_group = self.shape_groups[i]
+                    new_group = pydiffvg.ShapeGroup(
+                        shape_ids=torch.tensor([len(final_shapes) - 1]),
+                        fill_color=old_group.fill_color,
+                        stroke_color=old_group.stroke_color
+                    )
+                    final_groups.append(new_group)
 
-        # Log filtering statistics
-        num_filtered = len(self.shapes) - len(final_shapes)
-        if num_filtered > 0:
-            print(f"[SVG Export] Filtered out {num_filtered}/{len(self.shapes)} low-opacity strokes")
+            # Log filtering statistics
+            num_filtered = len(self.shapes) - len(final_shapes)
+            if num_filtered > 0:
+                print(f"[SVG Export] Filtered out {num_filtered}/{len(self.shapes)} low-opacity strokes (threshold={opacity_threshold})")
 
-        # Save using filtered lists
-        pydiffvg.save_svg(
-            f'{output_dir}/{fname}.svg',
-            self.canvas_width,
-            self.canvas_height,
-            final_shapes,
-            final_groups
-        )
+            # Save using filtered lists
+            pydiffvg.save_svg(
+                f'{output_dir}/{fname}.svg',
+                self.canvas_width,
+                self.canvas_height,
+                final_shapes,
+                final_groups
+            )
+        else:
+            # No filtering: save all strokes as-is
+            pydiffvg.save_svg(
+                f'{output_dir}/{fname}.svg',
+                self.canvas_width,
+                self.canvas_height,
+                self.shapes,
+                self.shape_groups
+            )
 
     def load_svg(self, path_svg):
         canvas_width, canvas_height, shapes, shape_groups = pydiffvg.svg_to_scene(path_svg)

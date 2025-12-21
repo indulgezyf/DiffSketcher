@@ -452,9 +452,18 @@ class DiffSketcherPipeline(ModelState):
                 self.step += 1
                 pbar.update(1)
 
-        # saving final svg
-        renderer.save_svg(self.svg_logs_dir.as_posix(), "final_svg_tmp")
-        # stroke pruning
+        # saving final svg with optional pruning filter
+        # If pruning was enabled (prune_loss_weight > 0), apply opacity filtering during export
+        prune_enabled = getattr(self.args, 'prune_loss_weight', 0.0) > 0.0
+        if prune_enabled:
+            # Save with filtering (remove dead strokes)
+            filter_threshold = 0.01  # Same threshold used in pruning loss
+            renderer.save_svg(self.svg_logs_dir.as_posix(), "final_svg_tmp", opacity_threshold=filter_threshold)
+        else:
+            # Save all strokes without filtering (baseline behavior)
+            renderer.save_svg(self.svg_logs_dir.as_posix(), "final_svg_tmp")
+
+        # Legacy stroke pruning (kept for backward compatibility)
         if self.args.opacity_delta != 0:
             remove_low_opacity_paths(self.svg_logs_dir / "final_svg_tmp.svg",
                                      self.results_path / "final_svg.svg",

@@ -62,11 +62,37 @@ def parse_svg(svg_path):
     return np.array(opacities), stroke_count
 
 
-def analyze_svg_file(svg_path, name="SVG"):
+def extract_short_name(svg_path):
+    """Extract a short, readable name from the path"""
+    path_str = str(svg_path)
+
+    # Try to extract test name from path structure
+    # e.g., ".../baseline_128paths/..." -> "Baseline 128"
+    # e.g., ".../pruned_256paths/..." -> "Pruned 256"
+    if 'baseline_128' in path_str:
+        return "Baseline 128"
+    elif 'baseline_256' in path_str:
+        return "Baseline 256"
+    elif 'pruned_128' in path_str:
+        return "Pruned 128"
+    elif 'pruned_256' in path_str:
+        return "Pruned 256"
+    elif 'pruned_aggressive' in path_str or 'aggressive' in path_str:
+        return "Aggressive"
+    else:
+        # Fallback: use parent directory name
+        return Path(svg_path).parent.parent.name
+
+
+def analyze_svg_file(svg_path, name=None):
     """Analyze a single SVG file"""
     if not Path(svg_path).exists():
         print(f"⚠ File not found: {svg_path}")
         return None
+
+    # Auto-generate short name if not provided
+    if name is None:
+        name = extract_short_name(svg_path)
 
     opacities, count = parse_svg(svg_path)
 
@@ -102,10 +128,10 @@ def plot_comparison(stats_list, output_path):
     ax = axes[0, 0]
     for stats in stats_list:
         ax.hist(stats['opacities'], bins=50, alpha=0.6, label=stats['name'])
-    ax.set_xlabel('Stroke Opacity')
-    ax.set_ylabel('Count')
-    ax.set_title('Opacity Distribution')
-    ax.legend()
+    ax.set_xlabel('Stroke Opacity', fontsize=11)
+    ax.set_ylabel('Count', fontsize=11)
+    ax.set_title('Opacity Distribution', fontsize=12, fontweight='bold')
+    ax.legend(fontsize=9, loc='upper right')
     ax.grid(True, alpha=0.3)
 
     # Subplot 2: Stroke category breakdown
@@ -118,12 +144,12 @@ def plot_comparison(stats_list, output_path):
         counts = [stats['dead'], stats['ghost'], stats['low'], stats['visible']]
         ax.bar(x + i * width, counts, width, label=stats['name'], alpha=0.8)
 
-    ax.set_xlabel('Stroke Category')
-    ax.set_ylabel('Count')
-    ax.set_title('Stroke Category Breakdown')
+    ax.set_xlabel('Stroke Category', fontsize=11)
+    ax.set_ylabel('Count', fontsize=11)
+    ax.set_title('Stroke Category Breakdown', fontsize=12, fontweight='bold')
     ax.set_xticks(x + width * (len(stats_list) - 1) / 2)
-    ax.set_xticklabels(categories)
-    ax.legend()
+    ax.set_xticklabels(categories, fontsize=10)
+    ax.legend(fontsize=9, loc='upper left')
     ax.grid(True, alpha=0.3, axis='y')
 
     # Subplot 3: Total stroke count comparison
@@ -138,12 +164,13 @@ def plot_comparison(stats_list, output_path):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height,
                 f'{int(height)}',
-                ha='center', va='bottom', fontweight='bold')
+                ha='center', va='bottom', fontweight='bold', fontsize=10)
 
-    ax.set_ylabel('Total Strokes')
-    ax.set_title('Final Stroke Count')
+    ax.set_ylabel('Total Strokes', fontsize=11)
+    ax.set_title('Final Stroke Count', fontsize=12, fontweight='bold')
     ax.grid(True, alpha=0.3, axis='y')
-    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    # No rotation needed for short names
+    plt.setp(ax.xaxis.get_majorticklabels(), fontsize=10)
 
     # Subplot 4: File size comparison
     ax = axes[1, 1]
@@ -154,12 +181,13 @@ def plot_comparison(stats_list, output_path):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height,
                 f'{height:.1f}KB',
-                ha='center', va='bottom', fontweight='bold')
+                ha='center', va='bottom', fontweight='bold', fontsize=10)
 
-    ax.set_ylabel('File Size (KB)')
-    ax.set_title('SVG File Size')
+    ax.set_ylabel('File Size (KB)', fontsize=11)
+    ax.set_title('SVG File Size', fontsize=12, fontweight='bold')
     ax.grid(True, alpha=0.3, axis='y')
-    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    # No rotation needed for short names
+    plt.setp(ax.xaxis.get_majorticklabels(), fontsize=10)
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
@@ -216,8 +244,7 @@ def main():
     # Analyze all files
     stats_list = []
     for svg_path in args.svg_files:
-        name = Path(svg_path).parent.parent.name  # Extract test name from path
-        stats = analyze_svg_file(svg_path, name)
+        stats = analyze_svg_file(svg_path)  # Name auto-extracted in function
         if stats:
             stats_list.append(stats)
 
