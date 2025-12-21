@@ -230,6 +230,45 @@ class DiffSketcherPipeline(ModelState):
         ys = torch.cat(y_augs, dim=0)
         return xs, ys
 
+    def compute_dynamic_loss_weights(self, step, total_steps):
+        """
+        🔥 Improvement 2: Dynamic Loss Weighting
+        Adjust loss weights based on training progress for better convergence.
+
+        Args:
+            step: Current optimization step
+            total_steps: Total optimization steps
+
+        Returns:
+            Dictionary with weight multipliers for each loss component
+        """
+        progress = step / max(total_steps, 1)
+
+        # Stage 1: Semantic Alignment (0-30%)
+        if progress < 0.3:
+            return {
+                'sds': 1.0,      # Focus on high-level semantic guidance
+                'visual': 0.3,   # Low weight on visual similarity
+                'percep': 0.1,   # Minimal perceptual loss
+                'tvd': 1.0       # Full text-visual alignment
+            }
+        # Stage 2: Shape Refinement (30-70%)
+        elif progress < 0.7:
+            return {
+                'sds': 0.6,      # Reduce SDS influence
+                'visual': 1.0,   # Focus on matching target shape
+                'percep': 0.5,   # Increase perceptual details
+                'tvd': 0.7       # Moderate text-visual alignment
+            }
+        # Stage 3: Detail Polishing (70-100%)
+        else:
+            return {
+                'sds': 0.2,      # Minimal SDS (structure already formed)
+                'visual': 0.7,   # Maintain shape
+                'percep': 1.0,   # Focus on fine details and textures
+                'tvd': 0.5       # Lower text-visual alignment
+            }
+
     def painterly_rendering(self, prompt: str):
         # log prompts
         self.print(f"prompt: {prompt}")
@@ -307,6 +346,8 @@ class DiffSketcherPipeline(ModelState):
                 sds_loss, grad = torch.tensor(0), torch.tensor(0)
                 if self.step >= self.args.sds.warmup:
                     grad_scale = self.args.sds.grad_scale if self.step > self.args.sds.warmup else 0
+                    # 🔥 Improvement 1: Pass curriculum parameters
+                    use_curriculum = getattr(self.args.sds, 'use_curriculum', False)
                     sds_loss, grad = self.diffusion.score_distillation_sampling(
                         raster_sketch,
                         crop_size=self.args.sds.crop_size,
@@ -316,6 +357,9 @@ class DiffSketcherPipeline(ModelState):
                         guidance_scale=self.args.sds.guidance_scale,
                         grad_scale=grad_scale,
                         t_range=list(self.args.sds.t_range),
+                        current_step=self.step,
+                        total_steps=self.args.num_iter,
+                        use_curriculum=use_curriculum,
                     )
 
                 # CLIP data augmentation
@@ -349,8 +393,17 @@ class DiffSketcherPipeline(ModelState):
                         raster_sketch_aug, self.args.prompt
                     ) * self.cargs.text_visual_coeff
 
-                # total loss
-                loss = sds_loss + total_visual_loss + l_percep + l_tvd
+                # 🔥 Improvement 2: Apply dynamic loss weighting
+                use_dynamic_weights = getattr(self.args, 'use_dynamic_weights', False)
+                if use_dynamic_weights:
+                    weights = self.compute_dynamic_loss_weights(self.step, self.args.num_iter)
+                    loss = (weights['sds'] * sds_loss +
+                            weights['visual'] * total_visual_loss +
+                            weights['percep'] * l_percep +
+                            weights['tvd'] * l_tvd)
+                else:
+                    # Original fixed weighting
+                    loss = sds_loss + total_visual_loss + l_percep + l_tvd
 
                 # optimization
                 optimizer.zero_grad_()

@@ -261,10 +261,38 @@ class Token2AttnMixinASDSPipeline(StableDiffusionPipeline):
                                     guidance_scale: float = 100,
                                     as_latent: bool = False,
                                     grad_scale: float = 1,
-                                    t_range: Union[List[float], Tuple[float]] = (0.02, 0.98)):
+                                    t_range: Union[List[float], Tuple[float]] = (0.02, 0.98),
+                                    current_step: int = None,
+                                    total_steps: int = None,
+                                    use_curriculum: bool = False):
+        """
+        Score Distillation Sampling with optional Timestep Curriculum Learning.
+
+        Args:
+            current_step: Current optimization step (for curriculum learning)
+            total_steps: Total optimization steps (for curriculum learning)
+            use_curriculum: Whether to use curriculum-based timestep scheduling
+        """
         num_train_timesteps = self.scheduler.config.num_train_timesteps
-        min_step = int(num_train_timesteps * t_range[0])
-        max_step = int(num_train_timesteps * t_range[1])
+
+        # 🔥 Improvement 1: Timestep Curriculum Scheduling
+        if use_curriculum and current_step is not None and total_steps is not None:
+            import math
+            progress = current_step / max(total_steps, 1)
+
+            # Cosine annealing schedule: high noise (large t) early, low noise (small t) late
+            annealing = 0.5 * (1 + math.cos(math.pi * progress))
+
+            # Dynamic t_range adjustment
+            # Early stage (progress=0): t_range ~ [0.35, 0.95] (high noise, global structure)
+            # Late stage (progress=1): t_range ~ [0.05, 0.75] (low noise, fine details)
+            min_step = int(num_train_timesteps * (t_range[0] + 0.3 * annealing))
+            max_step = int(num_train_timesteps * (t_range[1] - 0.2 * annealing))
+        else:
+            # Original fixed t_range
+            min_step = int(num_train_timesteps * t_range[0])
+            max_step = int(num_train_timesteps * t_range[1])
+
         alphas = self.scheduler.alphas_cumprod.to(self.device)  # for convenience
 
         # sketch augmentation
