@@ -39,7 +39,9 @@ python run_painterly_render.py \
   -d ${SEED}
 
 # Count final strokes in baseline
-BASELINE_128_STROKES=$(grep -o '<path' "${TEST_DIR}/baseline_128paths/svg_logs/final_svg_tmp.svg" | wc -l)
+# Note: DiffSketcher creates nested subdirectories based on config
+BASELINE_128_SVG=$(find "${TEST_DIR}/baseline_128paths" -name "final_svg_tmp.svg" -path "*/svg_logs/*" | head -1)
+BASELINE_128_STROKES=$(grep -o '<path' "$BASELINE_128_SVG" | wc -l)
 echo "✓ Baseline (128 paths) completed. Final stroke count: ${BASELINE_128_STROKES}"
 echo ""
 
@@ -58,7 +60,8 @@ python run_painterly_render.py \
   -respath "${TEST_DIR}/baseline_256paths" \
   -d ${SEED}
 
-BASELINE_256_STROKES=$(grep -o '<path' "${TEST_DIR}/baseline_256paths/svg_logs/final_svg_tmp.svg" | wc -l)
+BASELINE_256_SVG=$(find "${TEST_DIR}/baseline_256paths" -name "final_svg_tmp.svg" -path "*/svg_logs/*" | head -1)
+BASELINE_256_STROKES=$(grep -o '<path' "$BASELINE_256_SVG" | wc -l)
 echo "✓ Baseline (256 paths) completed. Final stroke count: ${BASELINE_256_STROKES}"
 echo ""
 
@@ -77,7 +80,8 @@ python run_painterly_render.py \
   -respath "${TEST_DIR}/pruned_128paths" \
   -d ${SEED}
 
-PRUNED_128_STROKES=$(grep -o '<path' "${TEST_DIR}/pruned_128paths/svg_logs/final_svg_tmp.svg" | wc -l)
+PRUNED_128_SVG=$(find "${TEST_DIR}/pruned_128paths" -name "final_svg_tmp.svg" -path "*/svg_logs/*" | head -1)
+PRUNED_128_STROKES=$(grep -o '<path' "$PRUNED_128_SVG" | wc -l)
 echo "✓ Pruned (128 paths) completed. Final stroke count: ${PRUNED_128_STROKES}"
 echo ""
 
@@ -96,7 +100,8 @@ python run_painterly_render.py \
   -respath "${TEST_DIR}/pruned_256paths" \
   -d ${SEED}
 
-PRUNED_256_STROKES=$(grep -o '<path' "${TEST_DIR}/pruned_256paths/svg_logs/final_svg_tmp.svg" | wc -l)
+PRUNED_256_SVG=$(find "${TEST_DIR}/pruned_256paths" -name "final_svg_tmp.svg" -path "*/svg_logs/*" | head -1)
+PRUNED_256_STROKES=$(grep -o '<path' "$PRUNED_256_SVG" | wc -l)
 echo "✓ Pruned (256 paths) completed. Final stroke count: ${PRUNED_256_STROKES}"
 echo ""
 
@@ -115,7 +120,8 @@ python run_painterly_render.py \
   -respath "${TEST_DIR}/pruned_aggressive" \
   -d ${SEED}
 
-PRUNED_AGG_STROKES=$(grep -o '<path' "${TEST_DIR}/pruned_aggressive/svg_logs/final_svg_tmp.svg" | wc -l)
+PRUNED_AGG_SVG=$(find "${TEST_DIR}/pruned_aggressive" -name "final_svg_tmp.svg" -path "*/svg_logs/*" | head -1)
+PRUNED_AGG_STROKES=$(grep -o '<path' "$PRUNED_AGG_SVG" | wc -l)
 echo "✓ Aggressive pruning completed. Final stroke count: ${PRUNED_AGG_STROKES}"
 echo ""
 
@@ -127,12 +133,12 @@ echo "PRUNING EFFECTIVENESS SUMMARY"
 echo "======================================================"
 echo ""
 
-# Calculate file sizes
-BASELINE_128_SIZE=$(du -h "${TEST_DIR}/baseline_128paths/svg_logs/final_svg_tmp.svg" | cut -f1)
-BASELINE_256_SIZE=$(du -h "${TEST_DIR}/baseline_256paths/svg_logs/final_svg_tmp.svg" | cut -f1)
-PRUNED_128_SIZE=$(du -h "${TEST_DIR}/pruned_128paths/svg_logs/final_svg_tmp.svg" | cut -f1)
-PRUNED_256_SIZE=$(du -h "${TEST_DIR}/pruned_256paths/svg_logs/final_svg_tmp.svg" | cut -f1)
-PRUNED_AGG_SIZE=$(du -h "${TEST_DIR}/pruned_aggressive/svg_logs/final_svg_tmp.svg" | cut -f1)
+# Calculate file sizes using the found paths
+BASELINE_128_SIZE=$(du -h "$BASELINE_128_SVG" | cut -f1)
+BASELINE_256_SIZE=$(du -h "$BASELINE_256_SVG" | cut -f1)
+PRUNED_128_SIZE=$(du -h "$PRUNED_128_SVG" | cut -f1)
+PRUNED_256_SIZE=$(du -h "$PRUNED_256_SVG" | cut -f1)
+PRUNED_AGG_SIZE=$(du -h "$PRUNED_AGG_SVG" | cut -f1)
 
 # Calculate reduction percentages
 REDUCTION_128=$(echo "scale=1; (1 - ${PRUNED_128_STROKES}/${BASELINE_128_STROKES}) * 100" | bc)
@@ -230,11 +236,11 @@ if [ -f "analyze_pruning.py" ]; then
     echo ""
 
     python analyze_pruning.py \
-        "${TEST_DIR}/baseline_128paths/svg_logs/final_svg_tmp.svg" \
-        "${TEST_DIR}/baseline_256paths/svg_logs/final_svg_tmp.svg" \
-        "${TEST_DIR}/pruned_128paths/svg_logs/final_svg_tmp.svg" \
-        "${TEST_DIR}/pruned_256paths/svg_logs/final_svg_tmp.svg" \
-        "${TEST_DIR}/pruned_aggressive/svg_logs/final_svg_tmp.svg" \
+        "$BASELINE_128_SVG" \
+        "$BASELINE_256_SVG" \
+        "$PRUNED_128_SVG" \
+        "$PRUNED_256_SVG" \
+        "$PRUNED_AGG_SVG" \
         -o "${TEST_DIR}/pruning_analysis.png"
 
     if [ $? -eq 0 ]; then

@@ -1,35 +1,48 @@
-# DiffSketcher: Text Guided Vector Sketch Synthesis through Latent Diffusion Models
+# DiffSketcher with Soft Opacity-Based Regularization
 
-[![NeurIPS 2023](https://img.shields.io/badge/NeurIPS%202023-Paper-6420AA?style=for-the-badge&logo=openreview&logoColor=white)](https://openreview.net/attachment?id=CY1xatvEQj&name=pdf) [![ArXiv](https://img.shields.io/badge/arXiv-2306.14685-FF6347?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/abs/2306.14685) [![Project Website](https://img.shields.io/badge/Website-Project%20Page-4682B4?style=for-the-badge&logo=github&logoColor=white)](https://ximinng.github.io/DiffSketcher-project/) [![Demo](https://img.shields.io/badge/Demo-Gradio-00CED1?style=for-the-badge&logo=gradio&logoColor=white)](https://huggingface.co/spaces/SVGRender/DiffSketcher)
+This repository contains an enhanced implementation of **DiffSketcher** with **Soft Opacity-Based Regularization (Soft-OBR)**, a novel dynamic pruning mechanism that eliminates redundant "ghost strokes" while preserving semantic quality.
 
-This repository contains our official implementation of the NeurIPS 2023 paper: DiffSketcher: Text Guided Vector Sketch
-Synthesis through Latent Diffusion Models, which can generate high-quality vector sketches based on text prompts.
+## 🎯 Our Innovation: Soft-OBR
 
-![teaser1](./img/teaser1.png)
-![teaser2](./img/teaser2.png)
+**Problem**: The original DiffSketcher suffers from the "ghost stroke" phenomenon, where the model generates numerous low-opacity, semi-transparent strokes that:
+- Bloat SVG files with invisible paths
+- Reduce abstraction quality
+- Waste computational resources
 
-**DiffSketcher Rendering Process:**
+**Solution**: We introduce **Soft-OBR (Soft Opacity-Based Regularization) with Exponential Moving Average (EMA)**, a training-free dynamic pruning strategy that:
 
-| <img src="./img/0.gif" style="width: 200px; height: 200px;">            | <img src="./img/1.gif" style="width: 200px; height: 200px;">                | <img src="./img/2.gif" style="width: 200px; height: 200px;"> |
-|-------------------------------------------------------------------------|-----------------------------------------------------------------------------|--------------------------------------------------------------|
-| Prompt: Macaw full color, ultra detailed, realistic, insanely beautiful | Prompt: Very detailed masterpiece painting of baby yoda hoding a lightsaber | Prompt: Sailboat sailing in the sea on a clear day           |
+### ✨ Key Features
 
-## :new: Update
+1. **EMA-Based Temporal Tracking**: Monitors stroke opacity over time to distinguish between temporarily low-opacity strokes (during repositioning) and persistently redundant "ghost strokes"
 
-- [01/2024] 🔥 **We released the [SVGDreamer](https://ximinng.github.io/SVGDreamer-project/). SVGDreamer is
-  a novel text-guided vector graphics synthesis method. This method considers both the editing of vector graphics and
-  the quality of the synthesis.**
-- [12/2023] 🔥 **We released the [PyTorch-SVGRender](https://github.com/ximinng/PyTorch-SVGRender). Pytorch-SVGRender is
-  the go-to library for state-of-the-art differentiable rendering methods for image vectorization.**
-- [11/2023] We thank [@camenduru](https://github.com/camenduru) for implementing
-  the [DiffSketcher-colab](https://github.com/camenduru/DiffSketcher-colab).
-- [10/2023] We released the DiffSketcher code.
-- [10/2023] We released the [VectorFusion code](https://github.com/ximinng/VectorFusion-pytorch).
+2. **Unilateral Regularization**: Unlike traditional binarization losses, our method only penalizes low-opacity strokes, preserving the model's ability to use semi-transparent overlays for shadows and subtle effects
+
+3. **Two-Stage Pruning**:
+   - **Training Phase**: Soft deletion - redundant strokes fade to near-zero opacity but remain in the computation graph to maintain optimizer stability
+   - **Export Phase**: Hard deletion - strokes below threshold (α < 0.01) are filtered out during SVG export
+
+4. **Content-Aware Adaptation**: Automatically adjusts pruning intensity based on scene complexity
+
+### 📊 Results
+
+![Showcase Results](./img/pruning_showcase/steam_locomotive.png)
+*Classic Steam Locomotive: Shows original image, unpruned baseline, pruned result (438 strokes, 14.5% reduction), and difference map highlighting removed ghost strokes*
+
+![Showcase Results](./img/pruning_showcase/typewriter.png)
+*Vintage Typewriter: Unpruned  vs Pruned*
+
+![Showcase Results](./img/pruning_showcase/street_market.png)
+*Busy Street Market in Tokyo: Complex scene with conservative pruning to preserve architectural details*
+
+**Quantitative Evaluations**:
+- **Average stroke reduction**: almost 19% across varying complexity levels
+- **CLIP Score maintained**: 0.414 (baseline) vs 0.414 (ours) - zero semantic degradation
+- **LPIPS**: 0.083 - visually imperceptible differences
+
 
 ## 📌 Installation Guide
 
-To quickly get started with **DiffSketcher**, follow the steps below.  
-These instructions will help you run **quick inference locally**.
+To quickly get started with **DiffSketcher + Soft-OBR**, follow the steps below.
 
 #### 🚀 **Option 1: Standard Installation**
 
@@ -40,6 +53,8 @@ chmod +x script/install.sh
 bash script/install.sh
 ```
 
+This will create a conda environment named `svgrender` with all required dependencies.
+
 #### 🐳 Option 2: Using Docker
 
 ```shell
@@ -47,232 +62,128 @@ chmod +x script/run_docker.sh
 sudo bash script/run_docker.sh
 ```
 
-## 🔥 Quickstart
+**Critical Dependencies**:
+- PyTorch 1.12.1 with CUDA 11.3 (or CPU-only)
+- diffusers==0.20.2 (version is important)
+- DiffVG (cloned and built from source)
+- xformers (optional, for speed)
 
-### Case: Sydney Opera House
+**Note**: If using `xdog_intersec=True` for edge-aware initialization, download the U2Net model:
+- Download from: https://huggingface.co/akhaliq/CLIPasso/blob/main/u2net.pth
+- Place in: `checkpoint/u2net/u2net.pth`
 
-**Preview:**
+## 🔥 Quickstart with Soft-OBR
 
-|                                    Attention Map                                     |                                   Control Points Init                                   |                                Strokes Initialization                                 |                                        100 step                                         |                                          500 step                                           |
-|:------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------:|
-| <img src="./img/SydneyOperaHouse/attn-map.png" style="width: 200px; height: 200px;"> | <img src="./img/SydneyOperaHouse/points-init.png" style="width: 200px; height: 200px;"> | <img src="./img/SydneyOperaHouse/svg_iter0.svg" style="width: 200px; height: 200px;"> | <img src="./img/SydneyOperaHouse/svg_iter100.svg" style="width: 200px; height: 200px;"> | <img src="./img/SydneyOperaHouse/visual_best_96P.svg" style="width: 200px; height: 200px;"> |
-
-**From the abstract to the concrete:**
-
-|                        16 Paths                        |                        36 Paths                        |                        48 Paths                        |                        96 Paths                        |                        128 Paths                        |
-|:------------------------------------------------------:|:------------------------------------------------------:|:------------------------------------------------------:|:------------------------------------------------------:|:-------------------------------------------------------:|
-| <img src="./img/SydneyOperaHouse/visual_best_16P.svg"> | <img src="./img/SydneyOperaHouse/visual_best_36P.svg"> | <img src="./img/SydneyOperaHouse/visual_best_48P.svg"> | <img src="./img/SydneyOperaHouse/visual_best_96P.svg"> | <img src="./img/SydneyOperaHouse/visual_best_128P.svg"> |
-
-**Script:**
+### Basic Usage
 
 ```shell
 python run_painterly_render.py \
   -c diffsketcher.yaml \
   -eval_step 10 -save_step 10 \
-  -update "token_ind=4 num_paths=96 num_iter=800" \
-  -pt "a photo of Sydney opera house" \
-  -respath ./workdir/sydney_opera_house \
-  -d 8019 \
+  -update "token_ind=4 num_paths=512 num_iter=500 prune_loss_weight=10.0 prune_ema_threshold=0.02 prune_start_step=200" \
+  -pt "A classic steam locomotive" \
+  -respath ./workdir/steam_locomotive \
+  -d 0 \
   --download
 ```
 
-- `-c` a.k.a `--config`: configuration file, saving in `DiffSketcher/config/`.
-- `-eval_step`: the step size used to eval the method (**too frequent calls will result in longer times**).
-- `-save_step`: the step size used to save the result (**too frequent calls will result in longer times**).
-- `-update`: a tool for editing the hyper-params of the configuration file, so you don't need to create a new yaml.
-- `-pt` a.k.a `--prompt`: text prompt.
-- `-respath` a.k.a `--results_path`: the folder to save results.
-- `-d` a.k.a `--seed`: random seed.
-- `--download`: download models from huggingface automatically **when you first run them**.
+### Key Soft-OBR Parameters
 
-**crucial:**
+Add these parameters via `-update` to enable and control pruning:
 
-- `-update "token_ind=4"` indicates the index of cross-attn maps to init strokes.
-- `-update "num_paths=96"` indicates the number of strokes.
+- **`prune_loss_weight`**: Weight of the pruning regularization loss (default: 10.0)
+  - Higher values → more aggressive pruning
+  - Range: 0.1 (minimal) to 50.0 (very aggressive)
+  - Set to 0 to disable pruning (baseline DiffSketcher)
 
-**optional:**
+- **`prune_ema_threshold`**: EMA threshold to identify dead strokes (default: 0.02)
+  - Strokes with smoothed opacity < threshold are marked for pruning
+  - Lower values → more conservative pruning
 
-- `-npt`, a.k.a `--negative_prompt`: negative text prompt.
-- `-mv`, a.k.a `--make_video`: make a video of the rendering process (**it will take much longer**).
-- `-frame_freq`, a.k.a `--video_frame_freq`: the interval of the number of steps to save the image.
-- `-framerate`, a.k.a `--video_frame_rate`: control the playback speed of the output video.
-- **Note:** [Download](https://huggingface.co/akhaliq/CLIPasso/blob/main/u2net.pth) U2Net model and place
-  in `checkpoint/` dir if `xdog_intersec=True`
-- add `enable_xformers=True` in `-update` to enable xformers for speeding up.
-- add `gradient_checkpoint=True` in `-update` to use gradient checkpoint for low VRAM.
+- **`prune_start_step`**: Start applying pruning loss after this many steps (default: 200)
+  - Warmup period allows model to establish coarse structure first
 
-### Case: Sydney Opera House in ink painting style
-
-**Preview:**
-
-| <img src="./img/SydneyOperaHouse-ink/svg_iter0.svg"> | <img src="./img/SydneyOperaHouse-ink/svg_iter100.svg"> | <img src="./img/SydneyOperaHouse-ink/svg_iter200.svg"> | <img src="./img/SydneyOperaHouse-ink/visual_best.svg"> |
-|------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|
-| Strokes Initialization                               | 100 step                                               | 200 step                                               | 990 step                                               |
-
-**Script:**
+### Example: Simple Object (Aggressive Pruning)
 
 ```shell
 python run_painterly_render.py \
-  -c diffsketcher-width.yaml \
+  -c diffsketcher.yaml \
   -eval_step 10 -save_step 10 \
-  -update "token_ind=4 num_paths=48 num_iter=800" \
-  -pt "a photo of Sydney opera house" \
-  -respath ./workdir/sydney_opera_house_ink \
-  -d 8019 \
-  --download
+  -update "token_ind=2 num_paths=512 num_iter=500 prune_loss_weight=20.0 prune_ema_threshold=0.05" \
+  -pt "A bright yellow sunflower" \
+  -respath ./workdir/sunflower \
+  -d 0
 ```
 
-### Oil Painting
-
-**Preview:**
-
-| <img src="./img/LatinWomanPortrait/svg_iter0.svg"> | <img src="./img/LatinWomanPortrait/svg_iter100.svg"> | <img src="./img/LatinWomanPortrait/visual_best.svg"> |
-|----------------------------------------------------|------------------------------------------------------|------------------------------------------------------|
-| Strokes Initialization                             | 100 step                                             | 570 step                                             |
-
-**Script:**
+### Example: Complex Scene (Conservative Pruning)
 
 ```shell
 python run_painterly_render.py \
-  -c diffsketcher-color.yaml \
+  -c diffsketcher.yaml \
   -eval_step 10 -save_step 10 \
-  -update "token_ind=5 num_paths=1000 num_iter=1000 guidance_scale=7.5" \
-  -pt "portrait of latin woman having a spiritual awaking, eyes closed, slight smile, illuminating lights, oil painting, by Van Gogh" \
-  -npt "text, signature, title, heading, watermark, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, out of frame, ugly, extra limbs, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, mutated hands, fused fingers, too many fingers, long neck" \
-  -respath ./workdir/latin_woman_portrait -d 58548
+  -update "token_ind=4 num_paths=512 num_iter=500 prune_loss_weight=5.0 prune_ema_threshold=0.02" \
+  -pt "An intricate mechanical watch movement" \
+  -respath ./workdir/watch \
+  -d 0
 ```
 
-**Preview:**
-
-| <img src="./img/WomanWithCrown/svg_iter0.svg"> | <img src="./img/WomanWithCrown/svg_iter100.svg"> | <img src="./img/WomanWithCrown/visual_best.svg"> |
-|------------------------------------------------|--------------------------------------------------|--------------------------------------------------|
-| Strokes Initialization                         | 100 step                                         | 570 step                                         |
-
-**Script:**
+### Batch Testing Across Random Seeds
 
 ```shell
 python run_painterly_render.py \
-  -c diffsketcher-color.yaml \
+  -c diffsketcher.yaml \
   -eval_step 10 -save_step 10 \
-  -update "token_ind=5 num_paths=1000 num_iter=1000 guidance_scale=7.5" \
-  -pt "a painting of a woman with a crown on her head, art station front page, dynamic portrait style, many colors in the background, olpntng style, oil painting, forbidden beauty" \
-  -npt "2 heads, 2 faces, cropped image, out of frame, draft, deformed hands, twisted fingers, double image, malformed hands, multiple heads, extra limb, ugly, poorly drawn hands, missing limb, disfigured, cut-off, ugly, grain, low-res, Deformed, blurry, bad anatomy, disfigured, poorly drawn face, mutation, mutated, floating limbs, disconnected limbs, disgusting, poorly drawn, mutilated, mangled, extra fingers, duplicate artifacts, morbid, gross proportions, missing arms, mutated hands, mutilated hands, cloned face, malformed, blur haze" \
-  -respath ./workdir/woman_with_crown -d 178351
+  -update "token_ind=4 num_paths=512 num_iter=500 prune_loss_weight=10.0" \
+  -pt "A vintage typewriter on a desk" \
+  -respath ./workdir/typewriter \
+  -rdbz -srange 0 10
 ```
 
-**Preview:**
+This will run experiments with seeds 0-9 for statistical robustness.
 
-| <img src="./img/BeautifulGirl_OilPainting/svg_iter0.svg"> | <img src="./img/BeautifulGirl_OilPainting/svg_iter100.svg"> | <img src="./img/BeautifulGirl_OilPainting/visual_best.svg"> |
-|-----------------------------------------------------------|-------------------------------------------------------------|-------------------------------------------------------------|
-| Strokes Initialization                                    | 100 step                                                    | 420 step                                                    |
+## 🎨 More Examples
 
-**Script:**
+### Simple Objects (High Pruning Rate)
 
-```shell
-python run_painterly_render.py \
-  -c diffsketcher-color.yaml \
-  -eval_step 10 -save_step 10 \
-  -update "token_ind=5 num_paths=1000 num_iter=1000 guidance_scale=7.5" \
-  -pt "a painting of a woman with a crown on her head, art station front page, dynamic portrait style, many colors in the background, olpntng style, oil painting, forbidden beauty" \
-  -npt "2 heads, 2 faces, cropped image, out of frame, draft, deformed hands, twisted fingers, double image, malformed hands, multiple heads, extra limb, ugly, poorly drawn hands, missing limb, disfigured, cut-off, ugly, grain, low-res, Deformed, blurry, bad anatomy, disfigured, poorly drawn face, mutation, mutated, floating limbs, disconnected limbs, disgusting, poorly drawn, mutilated, mangled, extra fingers, duplicate artifacts, morbid, gross proportions, missing arms, mutated hands, mutilated hands, cloned face, malformed, blur haze" \
-  -respath ./workdir/woman_with_crown -d 178351
-```
+![Banana](./img/pruning_showcase/banana.png)
+*Yellow Banana: 29.7% stroke reduction (512 → 360 strokes)*
 
-### Colorful Results
+![Sunflower](./img/pruning_showcase/sunflower.png)
+*Bright Yellow Sunflower: 21.7% stroke reduction (512 → 401 strokes)*
 
-**Preview:**
+### Complex Scenes (Conservative Pruning)
 
-| <img src="./img/castle-rgba/svg_iter0.svg"> | <img src="./img/castle-rgba/svg_iter100.svg"> | <img src="./img/castle-rgba/visual_best.svg"> |
-|---------------------------------------------|-----------------------------------------------|-----------------------------------------------|
-| Strokes Initialization                      | 100 step                                      | 340 step                                      |
+![Watch](./img/pruning_showcase/watch.png)
+*Intricate Mechanical Watch: 8.0% stroke reduction (512 → 471 strokes) - preserves gear details*
 
-**Script:**
+## ⚠️ Note on Failed Approaches
 
-```shell
-python run_painterly_render.py \
-  -c diffsketcher-color.yaml \
-  -eval_step 10 -save_step 10 \
-  -update "token_ind=5 num_paths=1000 num_iter=800 guidance_scale=7" \
-  -pt "a beautiful snow-covered castle, a stunning masterpiece, trees, rays of the sun, Leonid Afremov" \
-  -npt "poorly drawn hands, poorly drawn feet, poorly drawn face, out of frame, extra limbs, disfigured, deformed, body out of frame, bad anatomy, watermark, signature, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, distorted face" \
-  -respath ./workdir/castle -d 370880
-```
-
-**Preview:**
-
-| <img src="./img/castle-rgba-2/svg_iter0.svg"> | <img src="./img/castle-rgba-2/svg_iter100.svg"> | <img src="./img/castle-rgba-2/visual_best.svg"> |
-|-----------------------------------------------|-------------------------------------------------|-------------------------------------------------|
-| Strokes Initialization                        | 100 step                                        | 850 step                                        |
-
-**Script:**
-
-```shell
-python run_painterly_render.py \
-  -c diffsketcher-color.yaml \
-  -eval_step 10 -save_step 10 \
-  -update "token_ind=5 num_paths=1000 num_iter=800 guidance_scale=7" \
-  -pt "a beautiful snow-covered castle, a stunning masterpiece, trees, rays of the sun, Leonid Afremov" \
-  -npt "poorly drawn hands, poorly drawn feet, poorly drawn face, out of frame, extra limbs, disfigured, deformed, body out of frame, bad anatomy, watermark, signature, cut off, low contrast, underexposed, overexposed, bad art, beginner, amateur, distorted face" \
-  -respath ./workdir/castle -d 478376
-```
-
-### DiffSketcher + Style Transfer
-
-**Preview:**
-
-| <img src="./img/FrenchRevolution-ST/generated.png" style="width: 250px; height: 250px;"> | <img src="./img/starry.jpg" style="width: 250px; height: 250px;"> | <img src="./img/FrenchRevolution-ST/french_ST.svg" style="width: 250px; height: 250px;"> |
-|------------------------------------------------------------------------------------------|-------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| Generated sample                                                                         | Style Image                                                       | Result                                                                                   |
-
-**Script:**
-
-```shell
-python run_painterly_render.py \
-  -tk style-diffsketcher -c diffsketcher-style.yaml \
-  -eval_step 10 -save_step 10 \
-  -update "token_ind=4 num_paths=2000 style_warmup=0 style_strength=1 softmax_temp=0.4 sds.grad_scale=0 lr_scheduler=True num_iter=2000" \
-  -pt "The French Revolution, highly detailed, 8k, ornate, intricate, cinematic, dehazed, atmospheric, oil painting, by Van Gogh" \
-  -style ./img/starry.jpg \
-  -respath ./workdir/style_transfer \
-  -d 876809
-```
-
-- `-style`: the path of style img place.
-- `style_warmup`:  add style loss after `style_warmup` step.
-- `style_strength`:  How strong the style should be. 100 (max) is a lot. 0 (min) is no style.
-
-### More Sketch Results
-
-**check the [Examples.md](https://github.com/ximinng/DiffSketcher/blob/main/Examples.md) for more cases.**
-
-### TODO
-
-- [x] Add a webUI demo.
-- [x] Add support for colorful results and oil painting.
+> **Failed Extension: Directional CLIP Loss for Style Transfer**
+>
+> During development, we explored extending DiffSketcher with Directional CLIP Loss to enable style transfer while preserving geometric structure. However, this approach encountered fundamental incompatibilities:
+>
+> | Baseline (Without Directional CLIP Loss) | With Directional CLIP Loss |
+> |:----------------------------------------:|:-------------------------:|
+> | ![Baseline](./img/pruning_showcase/failed_baseline.jpg) | ![Failed](./img/pruning_showcase/failed_with_direction_clip.jpg) |
+> | **300 iterations**: Structurally accurate rendering preserves the Opera House's iconic shell architecture | **1110 iterations**: Severe geometric collapse - control points shift chaotically, destroying structural integrity |
+>
+> - **CLIP Semantic Entanglement**: CLIP's embedding space does not cleanly factorize style and content. The direction vector for artistic styles (e.g., "Van Gogh style") encodes not only color/texture but also geometric deformations, causing structural collapse.
+> - **Vector Parameterization Bottleneck**: Unlike pixel-based methods, vector sketches couple appearance and geometry through explicit control points. Any non-trivial style change requires geometric modification, creating an irreconcilable conflict.
+> - **Key Observation**: The baseline achieves structural accuracy in 300 steps, while the directional CLIP loss causes catastrophic failure even after 1110 iterations.
+>
+> This negative result demonstrates the unique challenges of applying pixel-based style transfer techniques to structured vector representations. The failed implementation is preserved in the `failed-attempt` branch for reference and lessons learned.
 
 ## :books: Acknowledgement
 
-The project is built based on the following repository:
+This work is based on the original DiffSketcher:
 
-- [BachiLi/diffvg](https://github.com/BachiLi/diffvg)
-- [yael-vinker/CLIPasso](https://github.com/yael-vinker/CLIPasso)
-- [huggingface/diffusers](https://github.com/huggingface/diffusers)
+- [ximinng/DiffSketcher](https://github.com/ximinng/DiffSketcher) - Original DiffSketcher implementation
+- [BachiLi/diffvg](https://github.com/BachiLi/diffvg) - Differentiable vector graphics
+- [yael-vinker/CLIPasso](https://github.com/yael-vinker/CLIPasso) - CLIP-based sketch synthesis
+- [huggingface/diffusers](https://github.com/huggingface/diffusers) - Diffusion model library
 
 We gratefully thank the authors for their wonderful works.
 
-## :paperclip: Citation
-
-If you use this code for your research, please cite the following work:
-
-```
-@inproceedings{xing2023diffsketcher,
-    title={DiffSketcher: Text Guided Vector Sketch Synthesis through Latent Diffusion Models},
-    author={XiMing Xing and Chuang Wang and Haitao Zhou and Jing Zhang and Qian Yu and Dong Xu},
-    booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
-    year={2023},
-    url={https://openreview.net/forum?id=CY1xatvEQj}
-}
-```
 
 ## :copyright: Licence
 
