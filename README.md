@@ -162,10 +162,10 @@ This will run experiments with seeds 0-9 for statistical robustness.
 >
 > During development, we explored extending DiffSketcher with Directional CLIP Loss to enable style transfer while preserving geometric structure. However, this approach encountered fundamental incompatibilities:
 >
-> | Baseline (Without Directional CLIP Loss) | With Directional CLIP Loss |
-> |:----------------------------------------:|:-------------------------:|
-> | ![Baseline](./img/pruning_showcase/failed_baseline.jpg) | ![Failed](./img/pruning_showcase/failed_with_direction_clip.jpg) |
-> | **300 iterations**: Structurally accurate rendering preserves the Opera House's iconic shell architecture | **1110 iterations**: Severe geometric collapse - control points shift chaotically, destroying structural integrity |
+>| Baseline (Without Directional CLIP Loss) | With Directional CLIP Loss |
+>|:----------------------------------------:|:-------------------------:|
+>| <img src="./img/pruning_showcase/failed_baseline.jpg" width="300" /> | <img src="./img/pruning_showcase/failed_with_direction_clip.jpg" width="300" /> |
+>| **300 iterations**: Structurally accurate rendering preserves the Opera House's iconic shell architecture | **1110 iterations**: Severe geometric collapse - control points shift chaotically, destroying structural integrity |
 >
 > - **CLIP Semantic Entanglement**: CLIP's embedding space does not cleanly factorize style and content. The direction vector for artistic styles (e.g., "Van Gogh style") encodes not only color/texture but also geometric deformations, causing structural collapse.
 > - **Vector Parameterization Bottleneck**: Unlike pixel-based methods, vector sketches couple appearance and geometry through explicit control points. Any non-trivial style change requires geometric modification, creating an irreconcilable conflict.
